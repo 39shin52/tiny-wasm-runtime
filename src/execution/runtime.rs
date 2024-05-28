@@ -157,6 +157,16 @@ impl Runtime {
                     self.stack.push(*value);
                 }
 
+                Instruction::LocalSet(idx) => {
+                    let Some(value) = self.stack.pop() else {
+                        bail!("not found value in the stack");
+                    };
+                    let idx = *idx as usize;
+                    frame.locals[idx] = value;
+                }
+
+                Instruction::I32Const(value) => self.stack.push(Value::I32(*value)),
+
                 Instruction::I32Add => {
                     let (Some(right), Some(left)) = (self.stack.pop(), self.stack.pop()) else {
                         bail!("not found any value in the stack");
@@ -179,6 +189,7 @@ impl Runtime {
                         }
                     }
                 }
+                _ => todo!(), // コンパイルエラーを回避するため命令処理は一旦TODO
             }
         }
         Ok(())
@@ -205,8 +216,13 @@ pub fn stack_unwind(stack: &mut Vec<Value>, sp: usize, arity: usize) -> Result<(
 
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     use super::Runtime;
-    use crate::execution::value::Value;
+    use crate::{
+        binary::{instruction::Instruction, module::Module, section::Function, types::FuncType},
+        execution::value::Value,
+    };
     use anyhow::{Ok, Result};
 
     #[test]
@@ -274,6 +290,54 @@ mod tests {
         runtime.add_import("env", "foooo", |_, _| Ok(None))?;
         let result = runtime.call("call_add", vec![Value::I32(1)]);
         assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn i32_const() -> Result<()> {
+        let wasm = wat::parse_file("src/fixtures/i32_const.wat")?;
+        let mut runtime = Runtime::instantiate(wasm)?;
+        let result = runtime.call("i32_const", vec![])?;
+        assert_eq!(result, Some(Value::I32(42)));
+        Ok(())
+    }
+
+    #[test]
+    fn local_set() -> Result<()> {
+        let wasm = wat::parse_file("src/fixtures/local_set.wat")?;
+        let mut runtime = Runtime::instantiate(wasm)?;
+        let result = runtime.call("local_set", vec![])?;
+        assert_eq!(result, Some(Value::I32(42)));
+        Ok(())
+    }
+
+    #[test]
+    fn decode_i32_store() -> Result<()> {
+        let wasm = wat::parse_str("(module (func (i32.store offset=4 (i32.const 4))))")?;
+        let module = Module::new(&wasm)?;
+        assert_eq!(
+            module,
+            Module {
+                type_section: Some(vec![FuncType {
+                    params: vec![],
+                    results: vec![],
+                }]),
+                function_section: Some(vec![0]),
+                code_section: Some(vec![Function {
+                    locals: vec![],
+                    code: vec![
+                        Instruction::I32Const(4),
+                        Instruction::I32Store {
+                            align: 2,
+                            offset: 4
+                        },
+                        Instruction::End
+                    ],
+                }]),
+                ..Default::default()
+            }
+        );
+
         Ok(())
     }
 }
