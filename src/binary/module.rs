@@ -1,5 +1,3 @@
-use std::fs::read_dir;
-
 use super::{
     instruction::Instruction,
     section::{Function, SectionCode}, 
@@ -13,7 +11,7 @@ use nom:: {
     sequence::pair, 
     IResult,
 };
-use nom_leb128::{leb128_i32, leb128_u32};
+use nom_leb128::leb128_u32;
 use num_traits::FromPrimitive as _;
 
 #[derive(Debug, PartialEq, Eq)]
